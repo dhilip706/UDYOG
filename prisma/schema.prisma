@@ -1,0 +1,842 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum RoleType {
+  BENEFICIARY
+  EMPLOYER
+  NGO
+  ADMIN
+}
+
+enum AuthProvider {
+  PHONE
+  GOOGLE
+}
+
+enum SkillEvidenceStatus {
+  CONFIRMED
+  SUPPORTED
+  NEEDS_VERIFICATION
+  DEVELOPING
+  MISSING
+}
+
+enum AssessmentDecisionState {
+  NO_ASSESSMENT_NEEDED
+  ASSESSMENT_RECOMMENDED
+  LEARNING_FIRST
+  MORE_INFORMATION_REQUIRED
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  APPRENTICESHIP
+  CONTRACT
+  SELF_EMPLOYMENT
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  SHORTLISTED
+  INTERVIEW
+  SELECTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ComplaintStatus {
+  NEW
+  ASSIGNED
+  INVESTIGATING
+  ACTION_REQUIRED
+  RESOLVED
+  CLOSED
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ComplaintCategory {
+  EMPLOYER
+  TRAINING_PROVIDER
+  APPLICATION
+  PAYMENT
+  MISTREATMENT
+  ABUSE
+  TECHNICAL_ISSUE
+  ACCOUNT_ISSUE
+  OTHER
+}
+
+// -------------------------------------------------------------
+// 1. Identity & Auth Architecture
+// -------------------------------------------------------------
+
+model User {
+  id            String       @id @default(uuid())
+  phoneNumber   String?      @unique
+  email         String?      @unique
+  displayName   String?
+  role          RoleType     @default(BENEFICIARY)
+  provider      AuthProvider @default(PHONE)
+  avatarUrl     String?
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  sessions            Session[]
+  phoneVerifications  PhoneVerification[]
+  beneficiaryProfile  BeneficiaryProfile?
+  employerProfile     Employer?
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+  complaints          Complaint[]         @relation("UserComplaints")
+  assignedComplaints  Complaint[]         @relation("AssignedAdminComplaints")
+  aiConversations     AIConversation[]
+
+  @@index([phoneNumber])
+  @@index([email])
+  @@index([role])
+  @@index([createdAt])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  token        String   @unique
+  refreshToken String?  @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+model PhoneVerification {
+  id          String   @id @default(uuid())
+  userId      String?
+  phoneNumber String
+  otpHash     String
+  attempts    Int      @default(0)
+  isVerified  Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phoneNumber])
+  @@index([createdAt])
+}
+
+// -------------------------------------------------------------
+// 2. Beneficiary Profile & Skill Intelligence
+// -------------------------------------------------------------
+
+model BeneficiaryProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  fullName          String
+  age               Int?
+  gender            String?
+  preferredLanguage String   @default("en")
+  state             String?
+  district          String?
+  locality          String?
+  isRelocationOpen  Boolean  @default(false)
+  availability      String?  @default("IMMEDIATE")
+  workPreference    JobType  @default(FULL_TIME)
+  currentOccupation String?
+  yearsExperience   Float?   @default(0)
+  profilePhotoUrl   String?
+  isVerified        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  educations          Education[]
+  certifications      Certification[]
+  experiences         OccupationExperience[]
+  skills              Skill[]
+  interests           Interest[]
+  aspirations         Aspiration[]
+  assessmentAttempts  AssessmentAttempt[]
+  learningPaths       LearningPath[]
+  applications        JobApplication[]
+
+  @@index([state, district])
+  @@index([preferredLanguage])
+  @@index([currentOccupation])
+  @@index([createdAt])
+}
+
+model Education {
+  id            String             @id @default(uuid())
+  profileId     String
+  level         String
+  institution   String?
+  yearOfPassing Int?
+  board         String?
+  specialization String?
+
+  profile BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+model Certification {
+  id              String             @id @default(uuid())
+  profileId       String
+  title           String
+  issuingBody     String
+  year            Int?
+  verificationUrl String?
+  isVerified      Boolean            @default(false)
+
+  profile BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+model OccupationExperience {
+  id             String             @id @default(uuid())
+  profileId      String
+  roleTitle      String
+  organization   String?
+  years          Float              @default(1)
+  toolsUsed      String[]           @default([])
+  responsibilities String?
+
+  profile BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+model Skill {
+  id              String              @id @default(uuid())
+  profileId       String
+  name            String
+  category        String              // TECHNICAL, PRACTICAL, TOOLS_MACHINES, DIGITAL, TRADITIONAL_CRAFT, etc.
+  evidenceStatus  SkillEvidenceStatus @default(SUPPORTED)
+  yearsExperience Float?              @default(1)
+  verifiedAt      DateTime?
+  source          String?             @default("INTERVIEW_EXTRACTION")
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  profile  BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  evidences SkillEvidence[]
+
+  @@index([profileId])
+  @@index([name])
+  @@index([category])
+  @@index([evidenceStatus])
+}
+
+model SkillEvidence {
+  id          String   @id @default(uuid())
+  skillId     String
+  evidenceType String  // VERBAL_TESTIMONY, ASSESSMENT_RESULT, CERTIFICATE, WORK_PORTFOLIO
+  description String
+  confidence  Float?   @default(0.85)
+  recordedAt  DateTime @default(now())
+
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@index([skillId])
+}
+
+model Interest {
+  id        String             @id @default(uuid())
+  profileId String
+  name      String
+
+  profile BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+model Aspiration {
+  id        String             @id @default(uuid())
+  profileId String
+  goalTitle String
+  targetTimeframe String?
+
+  profile BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+// -------------------------------------------------------------
+// 3. Official Benchmarks (NCO-2015 & NSQF)
+// -------------------------------------------------------------
+
+model OccupationBenchmark {
+  id                  String   @id @default(uuid())
+  ncoCode             String   @unique
+  title               String
+  sector              String
+  description         String
+  requiredSkills      String[] @default([])
+  preferredSkills     String[] @default([])
+  minEducation        String?
+  minExperienceYears  Float?   @default(0)
+  workConditions      String?
+  isVerifiedOfficial  Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  nsqfQualifications  NSQFQualification[]
+  jobs                Job[]
+
+  @@index([sector])
+  @@index([title])
+}
+
+model NSQFQualification {
+  id                 String   @id @default(uuid())
+  qpCode             String   @unique
+  occupationId       String
+  qualificationTitle String
+  nsqfLevel          Int      @default(4)
+  awardingBody       String?  // NCVET / Sector Skill Council
+  curriculumHours    Int?
+  isVerifiedOfficial Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  occupation      OccupationBenchmark @relation(fields: [occupationId], references: [id], onDelete: Cascade)
+  trainingCourses TrainingCourse[]
+
+  @@index([occupationId])
+  @@index([nsqfLevel])
+}
+
+model TrainingProvider {
+  id          String   @id @default(uuid())
+  name        String
+  registrationNo String?
+  state       String
+  district    String
+  contactEmail String?
+  contactPhone String?
+  isAccredited Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  courses TrainingCourse[]
+
+  @@index([state, district])
+}
+
+model TrainingCourse {
+  id                  String   @id @default(uuid())
+  providerId          String
+  qualificationId     String?
+  title               String
+  sector              String
+  durationHours       Int
+  deliveryMode        String   @default("HYBRID") // IN_PERSON, ONLINE, HYBRID
+  prerequisiteSkills  String[] @default([])
+  skillsCovered       String[] @default([])
+  isVerified          Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  provider      TrainingProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  qualification NSQFQualification? @relation(fields: [qualificationId], references: [id], onDelete: SetNull)
+
+  @@index([providerId])
+  @@index([qualificationId])
+  @@index([sector])
+}
+
+// -------------------------------------------------------------
+// 4. Adaptive Assessment & Learning
+// -------------------------------------------------------------
+
+model AssessmentAttempt {
+  id            String                  @id @default(uuid())
+  profileId     String
+  occupationId  String?
+  decisionState AssessmentDecisionState @default(ASSESSMENT_RECOMMENDED)
+  totalScore    Float?
+  feedback      String?
+  strengths     String[]                @default([])
+  gapsIdentified String[]               @default([])
+  startedAt     DateTime                @default(now())
+  completedAt   DateTime?
+
+  profile BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@index([startedAt])
+}
+
+model LearningPath {
+  id              String   @id @default(uuid())
+  profileId       String
+  targetCareer    String
+  status          String   @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, PAUSED
+  currentDay      Int      @default(1)
+  totalDays       Int      @default(7)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  modules LearningModule[]
+
+  @@index([profileId])
+}
+
+model LearningModule {
+  id             String   @id @default(uuid())
+  learningPathId String
+  dayNumber      Int
+  title          String
+  objective      String
+  estimatedMins  Int      @default(30)
+  isCompleted    Boolean  @default(false)
+  quizPassed     Boolean  @default(false)
+  resources      Json     @default("[]")
+
+  learningPath LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+
+  @@index([learningPathId])
+  @@index([dayNumber])
+}
+
+// -------------------------------------------------------------
+// 5. Employer & Job Ecosystem
+// -------------------------------------------------------------
+
+model Employer {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  companyName     String
+  industry        String
+  companySize     String?
+  website         String?
+  state           String
+  district        String
+  isVerified      Boolean  @default(false)
+  verificationDoc String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs Job[]
+
+  @@index([state, district])
+  @@index([industry])
+}
+
+model Job {
+  id                  String    @id @default(uuid())
+  employerId          String
+  occupationId        String?
+  title               String
+  description         String
+  jobType             JobType   @default(FULL_TIME)
+  openingsCount       Int       @default(1)
+  salaryMin           Float?
+  salaryMax           Float?
+  state               String
+  district            String
+  requiredSkills      String[]  @default([])
+  preferredSkills     String[]  @default([])
+  requiredEducation   String?
+  minExperienceYears  Float?    @default(0)
+  status              JobStatus @default(PUBLISHED)
+  isDemo              Boolean   @default(false)
+  applicationDeadline DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  employer     Employer             @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  occupation   OccupationBenchmark? @relation(fields: [occupationId], references: [id], onDelete: SetNull)
+  applications JobApplication[]
+
+  @@index([employerId])
+  @@index([occupationId])
+  @@index([state, district])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model JobApplication {
+  id                 String            @id @default(uuid())
+  jobId              String
+  profileId          String
+  status             ApplicationStatus @default(SUBMITTED)
+  matchExplanation   String?
+  missingSkills      String[]          @default([])
+  matchedSkills      String[]          @default([])
+  appliedAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  job        Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  profile    BeneficiaryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  events     ApplicationEvent[]
+  interviews Interview[]
+
+  @@unique([jobId, profileId])
+  @@index([jobId])
+  @@index([profileId])
+  @@index([status])
+  @@index([appliedAt])
+}
+
+model ApplicationEvent {
+  id            String            @id @default(uuid())
+  applicationId String
+  previousStatus ApplicationStatus?
+  newStatus     ApplicationStatus
+  note          String?
+  createdById   String?
+  createdAt     DateTime          @default(now())
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([createdAt])
+}
+
+model Interview {
+  id            String   @id @default(uuid())
+  applicationId String
+  scheduledAt   DateTime
+  mode          String   @default("IN_PERSON") // IN_PERSON, PHONE, VIDEO
+  locationOrLink String?
+  notes         String?
+  status        String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
+  createdAt     DateTime @default(now())
+
+  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([scheduledAt])
+}
+
+// -------------------------------------------------------------
+// 6. Grievance & Complaint Management
+// -------------------------------------------------------------
+
+model Complaint {
+  id             String            @id @default(uuid())
+  userId         String
+  category       ComplaintCategory @default(OTHER)
+  priority       ComplaintPriority @default(MEDIUM)
+  status         ComplaintStatus   @default(NEW)
+  subject        String
+  description    String
+  audioRecordUrl String?
+  attachmentUrl  String?
+  assignedAdminId String?
+  resolutionNote String?
+  resolvedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  user          User             @relation("UserComplaints", fields: [userId], references: [id], onDelete: Cascade)
+  assignedAdmin User?            @relation("AssignedAdminComplaints", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  events        ComplaintEvent[]
+
+  @@index([userId])
+  @@index([assignedAdminId])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model ComplaintEvent {
+  id          String          @id @default(uuid())
+  complaintId String
+  fromStatus  ComplaintStatus?
+  toStatus    ComplaintStatus
+  note        String
+  actorId     String?
+  createdAt   DateTime        @default(now())
+
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  @@index([complaintId])
+}
+
+// -------------------------------------------------------------
+// 7. Security, Audits, Regional Skill Intelligence & AI Support
+// -------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  resource  String
+  targetId  String?
+  ipAddress String?
+  details   Json?
+  timestamp DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([timestamp])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  channel   String   @default("IN_APP") // IN_APP, EMAIL, SMS
+  isRead    Boolean  @default(false)
+  linkUrl   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model AIConversation {
+  id         String   @id @default(uuid())
+  userId     String
+  companion  String   @default("aisha") // aisha or arjun
+  language   String   @default("en")
+  transcript Json     @default("[]")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RegionalSkillData {
+  id             String   @id @default(uuid())
+  state          String
+  district       String
+  sector         String
+  skillDemand    Json     // [{ skill: string, count: number }]
+  skillSupply    Json     // [{ skill: string, count: number }]
+  openJobsCount  Int      @default(0)
+  candidateCount Int      @default(0)
+  updatedAt      DateTime @default(now())
+
+  @@unique([state, district, sector])
+  @@index([state, district])
+}
+
+model SystemHealthMetric {
+  id         String   @id @default(uuid())
+  component  String   // DATABASE, AI_PROVIDER, STT, TTS, REDIS, STORAGE, EMAIL
+  status     String   // HEALTHY, DEGRADED, UNAVAILABLE
+  latencyMs  Int?
+  details    String?
+  recordedAt DateTime @default(now())
+
+  @@index([component])
+  @@index([recordedAt])
+}
+
+// -------------------------------------------------------------
+// 8. NGO & Community Organization Ecosystem
+// -------------------------------------------------------------
+
+enum NGOVerificationStatus {
+  PENDING
+  VERIFIED
+  NEEDS_REVIEW
+}
+
+enum NGOMemberRole {
+  NGO_ADMIN
+  PROGRAM_MANAGER
+  COMMUNITY_WORKER
+  TRAINING_COORDINATOR
+  EMPLOYMENT_COORDINATOR
+  VIEWER
+}
+
+enum CaseStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+model NGO {
+  id                  String                @id @default(uuid())
+  name                String
+  logoUrl             String?
+  orgType             String                @default("TRUST") // TRUST, SOCIETY, SECTION_8, FOUNDATION, OTHER
+  registrationNumber  String?
+  contactPerson       String
+  contactEmail        String
+  contactPhone        String
+  website             String?
+  address             String
+  state               String
+  district            String
+  operatingRegions    String[]              @default([])
+  languagesSupported  String[]              @default(["en", "hi"])
+  focusAreas          String[]              @default([])
+  yearsOfOperation    Float                 @default(1.0)
+  about               String?
+  verificationStatus  NGOVerificationStatus @default(PENDING)
+  isVerified          Boolean               @default(false)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  members             OrganizationMember[]
+  serviceAreas        ServiceArea[]
+  programs            CommunityProgram[]
+  trainingPrograms    NGOTrainingProgram[]
+  cases               SupportCase[]
+
+  @@index([state, district])
+  @@index([verificationStatus])
+}
+
+model OrganizationMember {
+  id        String        @id @default(uuid())
+  ngoId     String
+  userId    String
+  role      NGOMemberRole @default(COMMUNITY_WORKER)
+  name      String
+  email     String?
+  phone     String?
+  isActive  Boolean       @default(true)
+  joinedAt  DateTime      @default(now())
+
+  ngo NGO @relation(fields: [ngoId], references: [id], onDelete: Cascade)
+
+  @@index([ngoId])
+  @@index([userId])
+}
+
+model ServiceArea {
+  id        String   @id @default(uuid())
+  ngoId     String
+  state     String
+  district  String
+  block     String?
+  locality  String?
+  createdAt DateTime @default(now())
+
+  ngo NGO @relation(fields: [ngoId], references: [id], onDelete: Cascade)
+
+  @@index([ngoId])
+  @@index([state, district])
+}
+
+model BeneficiaryConsent {
+  id              String   @id @default(uuid())
+  profileId       String
+  consentType     String   // ASSISTED_ONBOARDING, PHOTO_UPLOAD, DATA_SHARING, EMPLOYER_MATCHING
+  isGranted       Boolean  @default(true)
+  capturedByNgoId String?
+  workerId        String?
+  signatureNote   String?
+  grantedAt       DateTime @default(now())
+
+  @@index([profileId])
+  @@index([capturedByNgoId])
+}
+
+model CommunityProgram {
+  id           String    @id @default(uuid())
+  ngoId        String
+  title        String
+  description  String
+  programType  String    // SKILL_CAMP, AWARENESS, DIGITAL_LITERACY, CAREER_GUIDANCE, TRAINING_DRIVE, EMPLOYER_MEET
+  location     String
+  state        String
+  district     String
+  startDate    DateTime
+  endDate      DateTime?
+  capacity     Int       @default(50)
+  registered   Int       @default(0)
+  attended     Int       @default(0)
+  eligibility  String?
+  skillsCovered String[] @default([])
+  outcome      String?
+  createdAt    DateTime  @default(now())
+
+  ngo NGO @relation(fields: [ngoId], references: [id], onDelete: Cascade)
+
+  @@index([ngoId])
+  @@index([state, district])
+}
+
+model NGOTrainingProgram {
+  id                 String   @id @default(uuid())
+  ngoId              String
+  title              String
+  sector             String
+  durationHours      Int      @default(60)
+  capacity           Int      @default(30)
+  enrolledCount      Int      @default(0)
+  completedCount     Int      @default(0)
+  skillsCovered      String[] @default([])
+  isNSQFAligned      Boolean  @default(false)
+  nsqfPathwayNote    String?  @default("Preliminary AI pathway — verification required")
+  status             String   @default("ACTIVE") // UPCOMING, ACTIVE, COMPLETED
+  state              String
+  district           String
+  createdAt          DateTime @default(now())
+
+  ngo NGO @relation(fields: [ngoId], references: [id], onDelete: Cascade)
+
+  @@index([ngoId])
+  @@index([sector])
+}
+
+model SupportCase {
+  id            String     @id @default(uuid())
+  ngoId         String
+  profileId     String
+  beneficiaryName String
+  category      String     // DOCUMENTATION, TRAINING, EMPLOYER_COMMUNICATION, APPLICATION, ACCESSIBILITY, FOLLOW_UP
+  priority      String     @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status        CaseStatus @default(NEW)
+  subject       String
+  description   String
+  assignedTo    String?
+  notes         Json       @default("[]") // Array of { id, text, author, timestamp }
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  ngo NGO @relation(fields: [ngoId], references: [id], onDelete: Cascade)
+
+  @@index([ngoId])
+  @@index([profileId])
+  @@index([status])
+}
+

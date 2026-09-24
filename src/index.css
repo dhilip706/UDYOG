@@ -1,0 +1,281 @@
+:root {
+  /* True Royal Blue Visual Identity (#071A3A, #0B2452, #12366F, #174A91, #1E5DB7) */
+  --color-royal-deepest: #071A3A;
+  --color-royal-base: #0B2452;
+  --color-royal-mid: #12366F;
+  --color-royal-bright: #174A91;
+  --color-royal-accent: #174A91;
+  --color-royal-highlight: #1E5DB7;
+
+  /* Restrained Steel & Ice Accents */
+  --color-steel-light: #8BAEDB;
+  --color-steel-muted: rgba(139, 174, 219, 0.16);
+  --color-steel-border: rgba(139, 174, 219, 0.3);
+
+  /* Typography & Neutrals */
+  --color-text-primary: #F5F7FA;
+  --color-text-secondary: #E2E8F0;
+  --color-text-muted: #9BB0CD;
+  --color-text-subtle: rgba(155, 176, 205, 0.65);
+
+  --color-error: #E07363;
+  --color-error-bg: rgba(224, 115, 99, 0.14);
+
+  /* Translucent Royal Blue Surfaces */
+  --glass-royal: rgba(11, 36, 82, 0.88);
+  --glass-royal-subtle: rgba(7, 26, 58, 0.78);
+  --glass-royal-elevated: rgba(18, 54, 111, 0.85);
+  --glass-royal-border: rgba(23, 74, 145, 0.5);
+  --glass-royal-border-hover: rgba(30, 93, 183, 0.65);
+
+  /* Classic, Refined Typography with full Pan-India 22 Scheduled Language & RTL script support */
+  --font-display: 'Times New Roman', Times, 'Noto Serif Tamil', 'Noto Serif Devanagari', 'Noto Serif Telugu', 'Noto Serif Kannada', 'Noto Serif Malayalam', 'Noto Serif Bengali', 'Noto Serif Gurmukhi', 'Noto Serif Gujarati', 'Noto Serif Oriya', 'Noto Nastaliq Urdu', 'Noto Sans Arabic', 'Noto Serif', Georgia, serif;
+  --font-serif: 'Times New Roman', Times, 'Noto Serif Tamil', 'Noto Serif Devanagari', 'Noto Serif Telugu', 'Noto Serif Kannada', 'Noto Serif Malayalam', 'Noto Serif Bengali', 'Noto Serif Gurmukhi', 'Noto Serif Gujarati', 'Noto Serif Oriya', 'Noto Nastaliq Urdu', 'Noto Sans Arabic', 'Noto Serif', Georgia, serif;
+  --font-body: 'Inter', 'Noto Sans Tamil', 'Noto Sans Devanagari', 'Noto Sans Telugu', 'Noto Sans Kannada', 'Noto Sans Malayalam', 'Noto Sans Bengali', 'Noto Sans Gurmukhi', 'Noto Sans Gujarati', 'Noto Sans Oriya', 'Noto Sans Arabic', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Shadows */
+  --shadow-royal: 0 16px 40px -10px rgba(7, 26, 58, 0.75), 0 0 1px rgba(139, 174, 219, 0.25);
+  --shadow-subtle: 0 4px 20px rgba(0, 0, 0, 0.4);
+
+  /* Transitions */
+  --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: all 0.18s ease-out;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  background-color: var(--color-royal-deepest);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  line-height: 1.65;
+}
+
+#root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+  background-color: var(--color-royal-deepest);
+}
+
+/* RTL Support */
+html[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="rtl"] .ltr-only {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Base typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+}
+
+p {
+  color: var(--color-text-muted);
+}
+
+/* Accessibility focus styles */
+:focus-visible {
+  outline: 2px solid var(--color-steel-light);
+  outline-offset: 3px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  color: inherit;
+  transition: var(--transition-fast);
+}
+
+input, select {
+  font-family: inherit;
+  color: inherit;
+  border: none;
+  outline: none;
+}
+
+/* Subtle Classic Animations */
+@keyframes classic-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes audio-wave {
+  0%, 100% {
+    height: 4px;
+    opacity: 0.5;
+  }
+  50% {
+    height: 16px;
+    opacity: 1;
+  }
+}
+
+/* Royal Navy Glass Surfaces */
+.classic-navy-surface {
+  background: var(--glass-royal);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-royal-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-royal);
+}
+
+.classic-navy-surface-subtle {
+  background: var(--glass-royal-subtle);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--glass-royal-border);
+  border-radius: 12px;
+}
+
+/* Focus highlight for guidance */
+.guidance-highlight {
+  border-color: var(--color-royal-highlight) !important;
+  box-shadow: 0 0 16px rgba(42, 105, 186, 0.45) !important;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-royal-deepest);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-royal-mid);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-royal-accent);
+}
+
+/* Classic Form Controls */
+.classic-input {
+  background: rgba(7, 26, 58, 0.85);
+  border: 1px solid rgba(139, 174, 219, 0.35);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  padding: 10px 14px;
+  transition: var(--transition-fast);
+  width: 100%;
+}
+
+.classic-input:focus {
+  border-color: var(--color-steel-light);
+  box-shadow: 0 0 12px rgba(139, 174, 219, 0.25);
+  outline: none;
+}
+
+/* Genuine Mobile-Optimized Composition (Target: 360x800, 375x812, 390x844, 412x915) */
+@media (max-width: 768px) {
+  main {
+    padding: 14px 10px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Translucent floating surfaces that preserve cinematic video background */
+  .classic-navy-surface {
+    background: rgba(7, 26, 58, 0.76) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
+    margin-bottom: 12px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
+    border: 1px solid rgba(139, 174, 219, 0.35) !important;
+  }
+
+  .classic-navy-surface-subtle {
+    background: rgba(7, 26, 58, 0.65) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    padding: 12px !important;
+  }
+
+  /* Responsive typography: no oversized headers, no overflowing text */
+  h1 {
+    font-size: clamp(1.2rem, 4.5vw, 1.45rem) !important;
+    line-height: 1.3 !important;
+  }
+
+  h2 {
+    font-size: clamp(1.05rem, 3.8vw, 1.2rem) !important;
+    line-height: 1.3 !important;
+  }
+
+  h3 {
+    font-size: clamp(0.92rem, 3.2vw, 1.05rem) !important;
+  }
+
+  p {
+    font-size: 0.84rem !important;
+    line-height: 1.45 !important;
+  }
+
+  /* Accessible touch targets >= 44px without oversized visuals */
+  button, .button, a.button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .classic-input {
+    padding: 8px 12px !important;
+    font-size: 0.85rem !important;
+  }
+}
+
+/* Responsive table & dialog helpers */
+.table-responsive-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 600px) {
+  .modal-compact-mobile {
+    width: calc(100vw - 24px) !important;
+    max-width: 100% !important;
+    padding: 16px 14px !important;
+    margin: 12px auto !important;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

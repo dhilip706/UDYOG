@@ -1,0 +1,42 @@
+{
+  "name": "aura-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npx tsx scripts/dev-orchestrator.ts",
+    "dev:frontend": "vite",
+    "dev:backend": "npx tsx server/src/index.ts",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "server": "npx tsx server/src/index.ts",
+    "typecheck": "tsc --noEmit && tsc --project tsconfig.server.json",
+    "test": "npx tsx scratch/test-full-platform.ts",
+    "db:seed": "npx tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.10.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.2.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "prisma": "^8.0.0-rc.15",
+    "tsx": "^4.23.15",
+    "typescript": "~5.7.2",
+    "vite": "^6.1.0"
+  }
+}
