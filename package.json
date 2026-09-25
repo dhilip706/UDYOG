@@ -15,7 +15,7 @@
     "db:seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^7.10.0",
+    "@prisma/client": "^6.19.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.3",
     "express": "^5.2.1",
@@ -34,7 +34,7 @@
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
-    "prisma": "^8.0.0-rc.15",
+    "prisma": "^6.19.3",
     "tsx": "^4.23.15",
     "typescript": "~5.7.2",
     "vite": "^6.1.0"
