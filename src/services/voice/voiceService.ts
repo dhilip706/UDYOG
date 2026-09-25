@@ -282,6 +282,18 @@ export class VoiceService {
   public getActiveProviderName(): string {
     return this.activeProvider.name;
   }
+
+  public getVexylEndpoint(): string {
+    return this.vexylProvider.getEndpoint();
+  }
+
+  public setVexylEndpoint(url: string | null): void {
+    this.vexylProvider.setEndpoint(url);
+  }
+
+  public isVexylConfigured(): boolean {
+    return this.vexylProvider.isConfigured();
+  }
 }
 
 export const voiceService = new VoiceService();

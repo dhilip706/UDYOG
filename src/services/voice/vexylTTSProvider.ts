@@ -23,9 +23,88 @@ import {
 } from './voiceTypes';
 import { getLanguageVoiceConfig } from './languageVoiceMap';
 
+export function isLocalEnvironment(): boolean {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    return true;
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    const host = (window.location.hostname || '').toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host === '[::1]' ||
+      host.endsWith('.local')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function normalizeWebSocketUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  let trimmed = url.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('https://')) {
+    trimmed = 'wss://' + trimmed.slice(8);
+  } else if (trimmed.startsWith('http://')) {
+    trimmed = 'ws://' + trimmed.slice(7);
+  } else if (trimmed.startsWith('//')) {
+    const isHttps = typeof window !== 'undefined' && window.location?.protocol === 'https:';
+    trimmed = (isHttps ? 'wss:' : 'ws:') + trimmed;
+  } else if (!trimmed.startsWith('ws://') && !trimmed.startsWith('wss://')) {
+    const isHttps = typeof window !== 'undefined' && window.location?.protocol === 'https:';
+    trimmed = (isHttps ? 'wss://' : 'ws://') + trimmed;
+  }
+
+  return trimmed.replace(/\/+$/, '');
+}
+
+export function resolveVexylUrl(): string {
+  const envUrl =
+    (typeof import.meta !== 'undefined' &&
+      (import.meta.env?.VITE_VEXYL_TTS_URL || import.meta.env?.VITE_VEXYL_WS_URL)) ||
+    (typeof process !== 'undefined' &&
+      process.env &&
+      (process.env.VITE_VEXYL_TTS_URL || process.env.VITE_VEXYL_WS_URL)) ||
+    (typeof window !== 'undefined' &&
+      ((window as any).__VEXYL_TTS_URL__ || (window as any).VITE_VEXYL_TTS_URL)) ||
+    '';
+
+  const isLocal = isLocalEnvironment();
+
+  if (typeof envUrl === 'string' && envUrl.trim()) {
+    const normalized = normalizeWebSocketUrl(envUrl);
+
+    // In production deployments (e.g. udyogxngo.vercel.app), avoid attempting loopback connections
+    if (!isLocal) {
+      const lower = normalized.toLowerCase();
+      if (lower.includes('127.0.0.1') || lower.includes('localhost') || lower.includes('0.0.0.0')) {
+        console.warn(
+          `[VexylTTS] Localhost VEXYL URL (${normalized}) ignored in production deployment. Configure VITE_VEXYL_TTS_URL with a remote wss:// URL in Vercel.`
+        );
+        return '';
+      }
+    }
+
+    return normalized;
+  }
+
+  // Local development fallback
+  if (isLocal) {
+    return 'ws://127.0.0.1:8080';
+  }
+
+  // In production with no environment variable provided, return empty to prevent ERR_CONNECTION_REFUSED
+  return '';
+}
+
 export class VexylTTSProvider implements IVoiceProvider {
   public readonly name = 'VexylTTS';
-  private endpoint: string;
+  private customEndpoint: string | null = null;
   private socket: WebSocket | null = null;
   private audioContext: AudioContext | null = null;
   private currentSource: AudioBufferSourceNode | null = null;
@@ -54,12 +133,10 @@ export class VexylTTSProvider implements IVoiceProvider {
   private isExplicitlyClosed = false;
   private connectPromise: Promise<boolean> | null = null;
 
-  constructor() {
-    const envUrl =
-      (typeof import.meta !== 'undefined' &&
-        (import.meta.env?.VITE_VEXYL_TTS_URL || import.meta.env?.VITE_VEXYL_WS_URL)) ||
-      'ws://127.0.0.1:8080';
-    this.endpoint = envUrl;
+  constructor(initialEndpoint?: string) {
+    if (initialEndpoint) {
+      this.customEndpoint = normalizeWebSocketUrl(initialEndpoint);
+    }
 
     // Attach global user-gesture listeners to automatically unlock Web Audio AudioContext
     if (typeof window !== 'undefined') {
@@ -70,6 +147,35 @@ export class VexylTTSProvider implements IVoiceProvider {
       window.addEventListener('click', unlock, { passive: true });
       window.addEventListener('keydown', unlock, { passive: true });
     }
+  }
+
+  public getEndpoint(): string {
+    if (this.customEndpoint) {
+      return this.customEndpoint;
+    }
+    return resolveVexylUrl();
+  }
+
+  public setEndpoint(url: string | null): void {
+    const next = url ? normalizeWebSocketUrl(url) : null;
+    if (this.customEndpoint === next) return;
+    this.customEndpoint = next;
+    if (this.socket) {
+      try {
+        this.socket.close();
+      } catch {}
+      this.socket = null;
+    }
+    this.reconnectAttempts = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.setState('DISCONNECTED');
+  }
+
+  public isConfigured(): boolean {
+    return Boolean(this.getEndpoint());
   }
 
   public getConnectionState(): VoiceConnectionState {
@@ -101,6 +207,12 @@ export class VexylTTSProvider implements IVoiceProvider {
       return false;
     }
 
+    const endpoint = this.getEndpoint();
+    if (!endpoint) {
+      this.setState('DISCONNECTED');
+      return false;
+    }
+
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.setState('CONNECTED');
       return true;
@@ -114,7 +226,7 @@ export class VexylTTSProvider implements IVoiceProvider {
 
     this.connectPromise = new Promise<boolean>((resolve) => {
       try {
-        const ws = new WebSocket(this.endpoint);
+        const ws = new WebSocket(endpoint);
 
         const openTimeout = setTimeout(() => {
           if (ws.readyState !== WebSocket.OPEN) {
@@ -229,6 +341,9 @@ export class VexylTTSProvider implements IVoiceProvider {
 
     this.setState('DISCONNECTED');
 
+    // Only attempt reconnect if a valid endpoint is configured
+    if (!this.isConfigured()) return;
+
     // Trigger exponential backoff reconnect
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 8000);
@@ -325,6 +440,7 @@ export class VexylTTSProvider implements IVoiceProvider {
    * Check if VEXYL server is alive and ready
    */
   public async isAvailable(): Promise<boolean> {
+    if (!this.isConfigured()) return false;
     return this.ensureConnected();
   }
 
@@ -355,9 +471,10 @@ export class VexylTTSProvider implements IVoiceProvider {
       throw new Error(`TTS unavailable for language ${langCode}`);
     }
 
+    const endpoint = this.getEndpoint();
     const connected = await this.ensureConnected();
     if (!connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      throw new Error(`VEXYL WebSocket server not connected at ${this.endpoint}`);
+      throw new Error(`VEXYL WebSocket server not connected at ${endpoint || 'unconfigured endpoint'}`);
     }
 
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -412,6 +529,7 @@ export class VexylTTSProvider implements IVoiceProvider {
    * Pre-warm persistent WebSocket connection and model
    */
   public async warmUp(): Promise<void> {
+    if (!this.isConfigured()) return;
     try {
       await this.ensureConnected();
     } catch {}
@@ -422,6 +540,7 @@ export class VexylTTSProvider implements IVoiceProvider {
    */
   public async preWarmPrompt(text: string, langCode: string): Promise<void> {
     try {
+      if (!this.isConfigured()) return;
       const trimmed = text.trim();
       if (!trimmed) return;
       const config = getLanguageVoiceConfig(langCode);
